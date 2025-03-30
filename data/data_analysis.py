@@ -3,18 +3,7 @@ import numpy as np
 import os
 import glob
 import matplotlib.pyplot as plt
-
-
-def mouse_x_one_hot_to_value(one_hot_vector):
-    MOUSE_X = [-1000.0,-500.0, -300.0, -200.0, -100.0, -60.0, -30.0, -20.0, -10.0, -4.0, -2.0, -0.0, 2.0, 4.0, 10.0, 20.0, 30.0, 60.0, 100.0, 200.0, 300.0, 500.0,1000.0]
-    index = int(np.argmax(one_hot_vector))
-    return MOUSE_X[index]
-
-
-def mouse_y_one_hot_to_value(one_hot_vector):
-    MOUSE_Y = [-200.0, -100.0, -50.0, -20.0, -10.0, -4.0, -2.0, -0.0, 2.0, 4.0, 10.0, 20.0, 50.0, 100.0, 200.0]
-    index = int(np.argmax(one_hot_vector))
-    return MOUSE_Y[index]
+from data_utils import mouse_x_one_hot_to_value, mouse_y_one_hot_to_value
 
 
 def calculate_key_press_rate(is_pressed):
@@ -23,7 +12,7 @@ def calculate_key_press_rate(is_pressed):
 
 # Set the directory path where your HDF5 files are located
 hdf5_dir = '/home/wentao/cs_dateset/'  # replace with your directory
-hdf5_files = glob.glob(os.path.join(hdf5_dir, '*.h5')) + glob.glob(os.path.join(hdf5_dir, '*.hdf5'))
+hdf5_files = glob.glob(os.path.join(hdf5_dir, '*.hdf5'))
 
 success_count = 0
 fail_count = 0
