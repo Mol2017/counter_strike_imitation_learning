@@ -90,4 +90,4 @@ for epoch in range(n_epoch):
             f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
 # Save the model
-torch.save(model.state_dict(), "cstransformer1.pth")
+torch.save(model.state_dict(), "cstransformer.pth")
