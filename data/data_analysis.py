@@ -11,7 +11,7 @@ def calculate_key_press_rate(is_pressed):
 
 
 # Set the directory path where your HDF5 files are located
-hdf5_dir = '/home/wentao/cs_dateset/'  # replace with your directory
+hdf5_dir = '/home/wentao/cs_dataset_aim/'  # replace with your directory
 hdf5_files = glob.glob(os.path.join(hdf5_dir, '*.hdf5'))
 
 success_count = 0
@@ -60,7 +60,7 @@ for file in hdf5_files:
         print(f" Failed to open file: {file}")
         print(f" Error: {e}")
         fail_count += 1
-        continue  
+        continue
         
 print(f"Successfully processed: {success_count} files")
 print(f"Failed to process: {fail_count} files")

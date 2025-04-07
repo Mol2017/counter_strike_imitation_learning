@@ -1,18 +1,20 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from data.data_utils import CSDataset
 from torch.utils.data import DataLoader
-from model.cs_transformer import CSTransformer
+
 from utils.utils import move_dict_to_device
+from model.cs_transformer_v1 import CSTransformerV1 as CSTransformer
 import torchvision.transforms as transforms
 
 
 # Hyperparameters
-hdf5_dir = '/home/wentao/cs_dateset/'  # replace with your directory
-n_episode = 10 # 188 in total
+hdf5_dir = '/home/wentao/cs_dataset_aim/'  # replace with your directory
+n_episode = 44 # 188 in total
 train_val_split = 0.8
-n_epoch = 4 * 100000
+n_epoch = 400
 
 # Device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -31,10 +33,10 @@ shuffled_ids = np.random.permutation(n_episode)
 train_ids = shuffled_ids[:int(train_val_split*n_episode)]
 val_ids = shuffled_ids[int(train_val_split*n_episode):]
 train_dataset = CSDataset(train_ids, hdf5_dir, transform=transform)
-train_dataloader = DataLoader(train_dataset, batch_size=8, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
+train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
-val_dataset = CSDataset(val_ids, hdf5_dir, transform=transform)
-val_dataloader = DataLoader(val_dataset, batch_size=4, shuffle=False, pin_memory=True, num_workers=1, prefetch_factor=1)
+val_dataset = CSDataset(train_ids, hdf5_dir, transform=transform)
+val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False, pin_memory=True, num_workers=1, prefetch_factor=1)
 
 # Model 
 model = CSTransformer().to(device)
@@ -43,7 +45,7 @@ model = CSTransformer().to(device)
 criterion = nn.L1Loss()
 
 # Optimizer
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
 # Training loop
 for epoch in range(n_epoch):
@@ -56,7 +58,13 @@ for epoch in range(n_epoch):
         
         optimizer.zero_grad()
         outputs = model(inputs)
+
         loss = criterion(outputs['action'], targets['action'])
+
+        # bce_loss = F.binary_cross_entropy(outputs['action'][..., :10], targets['action'][..., :10])
+        # l2_loss = F.mse_loss(outputs['action'][..., 10:], targets['action'][..., 10:])
+        # loss = bce_loss + l2_loss
+        
         loss.backward()
         optimizer.step()
 
@@ -80,3 +88,6 @@ for epoch in range(n_epoch):
 
     print(f"[Epoch {epoch+1}/{n_epoch}] "
             f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+
+# Save the model
+torch.save(model.state_dict(), "cstransformer1.pth")

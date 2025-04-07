@@ -23,42 +23,58 @@ def mouse_y_one_hot_to_value(one_hot_vector):
 class CSDataset(Dataset):
     def __init__(self, episode_ids, hdf5_dir, transform=None):
         super().__init__()
-        self.episode_ids = episode_ids
         self.hdf5_dir = hdf5_dir
+        self.episode_ids = episode_ids
         self.transform = transform
 
+        self.history_len = 4
+        self.future_len = 2
+        self.stride = 4
+        
+        self.index_map = self._build_index_map()
+
+    def _build_index_map(self):
+        index_map = []
+        for episode_id in self.episode_ids:
+            file_path = os.path.join(self.hdf5_dir, f'hdf5_aim_july2021_expert_{episode_id}.hdf5')
+            with h5py.File(file_path, 'r') as f:
+                total_frames = 1000 # Each episode has 1000 frames (16 fps)
+                for start in range(0, total_frames-(self.history_len+self.future_len), self.stride):
+                    h_start = start
+                    h_end = start + self.history_len
+                    f_start = h_end
+                    f_end = f_start + self.future_len
+                    index_map.append((episode_id, h_start, h_end, f_start, f_end))
+        return index_map
+
     def __len__(self):
-        return len(self.episode_ids)
+        return len(self.index_map)
 
     def __getitem__(self, index):
-        episode_id = self.episode_ids[index]
-        hdf5_file_path = os.path.join(self.hdf5_dir, f'hdf5_dm_july2021_expert_{episode_id}.hdf5')
+        episode_id, h_start, h_end, f_start, f_end = self.index_map[index]
+        hdf5_file_path = os.path.join(self.hdf5_dir, f'hdf5_aim_july2021_expert_{episode_id}.hdf5')
         with h5py.File(hdf5_file_path, 'r') as f:
-            # Assume that each episode has 1000 frames (16 fps)
-            # 1.5 seconds images -> 0.5 seconds actions
-            # 24 frames images -> 8 frames actions
-            n_frames = 32
-            frame_start = random.randint(0, 1000 - 32)
-            frame_end = frame_start + n_frames
-            
             images = []
             actions = []
-            for i in range(frame_start, frame_end):
+            for i in range(h_start, f_end):
                 image_key = f'frame_{i}_x'
                 action_key = f'frame_{i}_y'
 
                 image = f[image_key][:] # [150, 280, 3(BGR)]
-                image = image[..., ::-1] # [150, 280, 3(RGB)]
-                action = f[action_key][:] # [51]
-                processed_action = action[:7] # w,s,a,d,space,ctrl,shift
-                processed_action = np.append(processed_action, action[10]) # r
-                processed_action = np.append(processed_action, action[11:13]) # left/right click
-                processed_action = np.append(processed_action, mouse_x_one_hot_to_value(action[13:36])) # mouse_x
-                processed_action = np.append(processed_action, mouse_y_one_hot_to_value(action[36:50])) # mouse_y
-                
+                image = image[..., ::-1] # [150, 280, 3(RGB)]             
                 if self.transform:
                     image = Image.fromarray(image.astype(np.uint8))
                     image = self.transform(image)
+                
+                action = f[action_key][:] # [51]
+                processed_action = np.concatenate([
+                    action[:7], # w,s,a,d,space,ctrl,shift
+                    [action[10]], # r
+                    action[11:13], # left/right click
+                    [mouse_x_one_hot_to_value(action[13:36])], # mouse_x
+                    [mouse_y_one_hot_to_value(action[36:50])], # mouse_y
+                ])
+
                 images.append(image)
                 actions.append(processed_action)
 
@@ -66,27 +82,26 @@ class CSDataset(Dataset):
             actions = np.stack(actions, axis=0) # [32, 12]
             
             inputs = {
-                'image': torch.tensor(images[:24] , dtype=torch.float32),
+                'image': torch.tensor(images[:self.history_len] , dtype=torch.float32),
             }
             
             targets = {
-                'action': torch.tensor(actions[24:], dtype=torch.float32)
+                'action': torch.tensor(actions[self.history_len:], dtype=torch.float32)
             }
             return inputs, targets
 
 
 if __name__ == '__main__':
-    hdf5_dir = '/home/wentao/cs_dateset/'  # replace with your directory
-    n_episode = 188
-    train_val_split = 0.8
+    hdf5_dir = '/home/wentao/cs_dataset_aim/'  # replace with your directory
+    n_episode = 44
+    train_val_split = 1
     shuffled_ids = np.random.permutation(n_episode)
     train_ids = shuffled_ids[:int(train_val_split*n_episode)]
-    val_ids = shuffled_ids[int(train_val_split*n_episode):]
 
     # Visualize the dataset
-    train_dataset = CSDataset(train_ids, hdf5_dir)
-    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
-    for batch_idx, (inputs, targets) in enumerate(train_dataloader):
+    dataset = CSDataset(shuffled_ids, hdf5_dir)
+    dataloader = DataLoader(dataset, batch_size=8, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
+    for batch_idx, (inputs, targets) in enumerate(dataloader):
         image_data = inputs['image'].numpy()
         n_batch, n_frame, _, _, _ = image_data.shape
         for n in range(n_batch):
@@ -109,10 +124,12 @@ if __name__ == '__main__':
         )
     ])
     train_dataset = CSDataset(train_ids, hdf5_dir, transform=transform)
-    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     for batch_idx, (inputs, targets) in enumerate(train_dataloader):
         image_data = inputs['image'].numpy()
+        action_data = targets['action'].numpy()
         print("Image Shape After Transform: ", image_data.shape)
+        print("Action Shape: ", action_data.shape)
         break
     
     
